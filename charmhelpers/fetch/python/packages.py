@@ -16,9 +16,11 @@
 # limitations under the License.
 
 import os
+import pkg_resources
 import six
 import subprocess
 import sys
+import distutils.spawn
 
 from charmhelpers.fetch import apt_install, apt_update
 from charmhelpers.core.hookenv import charm_dir, log
@@ -26,25 +28,38 @@ from charmhelpers.core.hookenv import charm_dir, log
 __author__ = "Jorge Niedbalski <jorge.niedbalski@canonical.com>"
 
 
-def pip_execute(*args, **kwargs):
-    """Overriden pip_execute() to stop sys.path being changed.
+def get_pip_entrypoint():
+    python_version = ".".join(str(v) for v in sys.version_info[:2])
+    working_set = pkg_resources.WorkingSet()
+    pip = next(iter(d for d in working_set if d.project_name == "pip"))
+    entry_points = pip.get_entry_map()
+    console_scripts = entry_points.get("console_scripts", {})
+    pip_names = (
+        "pip{0}".format(python_version),
+        "pip{0!s}".format(sys.version_info[0]),
+        "pip"
+    )
+    entry_point = next(iter(
+        console_scripts[name] for name in pip_names if name in console_scripts
+    ))
+    return entry_point.resolve()
 
-    The act of importing main from the pip module seems to cause add wheels
-    from the /usr/share/python-wheels which are installed by various tools.
-    This function ensures that sys.path remains the same after the call is
-    executed.
+
+def pip_execute(*args, **kwargs):
+    """Calls pip from the given python version.
     """
+
     try:
         _path = sys.path
         try:
-            from pip import main as _pip_execute
-        except ImportError:
+            _pip_execute = get_pip_entrypoint()
+        except KeyError:
             apt_update()
             if six.PY2:
                 apt_install('python-pip')
             else:
                 apt_install('python3-pip')
-            from pip import main as _pip_execute
+            _pip_execute = get_pip_entrypoint()
         _pip_execute(*args, **kwargs)
     finally:
         sys.path = _path
