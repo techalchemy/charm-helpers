@@ -98,8 +98,12 @@ def pip_install_requirements(requirements, constraints=None, **options):
 
 
 def pip_install(package, fatal=False, upgrade=False, venv=None,
-                constraints=None, **options):
+                constraints=None, ensure_venv=False, **options):
     """Install a python package"""
+    if ensure_venv:
+        venv = os.path.join(charm_dir(), 'venv')
+        if not os.path.exists(venv):
+            pip_create_virtualenv(venv)
     if venv:
         venv_python = os.path.join(venv, 'bin/python')
         command = [venv_python, "-m", "pip", "install"]
@@ -158,7 +162,7 @@ def pip_create_virtualenv(path=None, python_version=3):
     if path:
         venv_path = path
     else:
-        venv_path = os.path.join(charm_dir(), '.venv')
+        venv_path = os.path.join(charm_dir(), 'venv')
     
     # TODO: If we are in the opposite py version of the desired one, install
     # the desired version first, then create the venv
