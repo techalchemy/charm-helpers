@@ -101,8 +101,8 @@ def pip_install(package, fatal=False, upgrade=False, venv=None,
                 constraints=None, **options):
     """Install a python package"""
     if venv:
-        venv_python = os.path.join(venv, 'bin/pip')
-        command = [venv_python, "install"]
+        venv_python = os.path.join(venv, 'bin/python')
+        command = [venv_python, "-m", "pip", "install"]
     else:
         command = ["install"]
 
@@ -153,17 +153,31 @@ def pip_list():
     return pip_execute(["list"])
 
 
-def pip_create_virtualenv(path=None):
+def pip_create_virtualenv(path=None, python_version=3):
     """Create an isolated Python environment."""
-    if six.PY2:
-        apt_install('python-virtualenv')
-    else:
-        apt_install('python3-virtualenv')
-
     if path:
         venv_path = path
     else:
-        venv_path = os.path.join(charm_dir(), 'venv')
+        venv_path = os.path.join(charm_dir(), '.venv')
+    
+    # TODO: If we are in the opposite py version of the desired one, install
+    # the desired version first, then create the venv
+    # and use it
+    target_python = ""
+    if six.PY2:
+        apt_install('python2-virtualenv')
+        command = [sys.executable, "-m", "virtualenv", venv_path]
+        if python_version == 3:
+            apt_install(["python3-pip", "python3-setuptools", "python3-wheel", "python3"])
+            target_python = distutils.spawn.find_executable("python3")
+            command.extend(["--python", target_python])
+    else:
+        apt_install('python3-venv')
+        command = [sys.executable, "-m", "venv", venv_path]
+        if python_version == 2:
+            apt_install(["python-pip", "python-setuptools", "python-wheel", "python"])
+            target_python = distutils.spawn.find_executable("python2")
+            command.extend(["--python", target_python])
 
     if not os.path.exists(venv_path):
-        subprocess.check_call(['virtualenv', venv_path])
+        subprocess.check_call(command)
