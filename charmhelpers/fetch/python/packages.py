@@ -101,7 +101,7 @@ def pip_install(package, fatal=False, upgrade=False, venv=None,
                 constraints=None, ensure_venv=False, **options):
     """Install a python package"""
     if ensure_venv:
-        venv = os.path.join(charm_dir(), 'venv')
+        venv = os.path.abspath(os.path.join(charm_dir(), "../.venv"))
         if not os.path.exists(venv):
             pip_create_virtualenv(venv)
     if venv:
@@ -162,8 +162,7 @@ def pip_create_virtualenv(path=None, python_version=3):
     if path:
         venv_path = path
     else:
-        venv_path = os.path.join(charm_dir(), 'venv')
-    
+        venv_path = os.path.abspath(os.path.join(charm_dir(), "../.venv"))
     # TODO: If we are in the opposite py version of the desired one, install
     # the desired version first, then create the venv
     # and use it
@@ -182,6 +181,5 @@ def pip_create_virtualenv(path=None, python_version=3):
             apt_install(["python-pip", "python-setuptools", "python-wheel", "python"])
             target_python = distutils.spawn.find_executable("python2")
             command.extend(["--python", target_python])
-
     if not os.path.exists(venv_path):
         subprocess.check_call(command)
