@@ -1,8 +1,8 @@
-import collections
 import charmhelpers.contrib.openstack.context as context
-import yaml
+import collections
 import json
 import unittest
+import yaml
 from copy import copy, deepcopy
 from mock import (
     patch,
@@ -276,6 +276,10 @@ AMQP_OSLO_CONFIG = {
 
 AMQP_NOTIFICATION_FORMAT = {
     'notification-format': 'both'
+}
+
+AMQP_NOTIFICATION_TOPICS = {
+    'notification-topics': 'foo,bar'
 }
 
 AMQP_NOTIFICATIONS_LOGS = {
@@ -1468,6 +1472,26 @@ class ContextTests(unittest.TestCase):
             'rabbitmq_user': 'adam',
             'rabbitmq_virtual_host': 'foo',
             'notification_format': 'both',
+            'transport_url': 'rabbit://adam:foobar@rabbithost:5672/foo'
+        }
+
+        self.assertEquals(result, expected)
+
+    def test_amqp_context_with_notification_topics(self):
+        """Test amqp context with notification_topics option"""
+        relation = FakeRelation(relation_data=AMQP_RELATION)
+        self.relation_get.side_effect = relation.get
+        AMQP_NOTIFICATION_TOPICS.update(AMQP_CONFIG)
+        self.config.return_value = AMQP_NOTIFICATION_TOPICS
+        amqp = context.AMQPContext()
+        result = amqp()
+        expected = {
+            'oslo_messaging_driver': 'messagingv2',
+            'rabbitmq_host': 'rabbithost',
+            'rabbitmq_password': 'foobar',
+            'rabbitmq_user': 'adam',
+            'rabbitmq_virtual_host': 'foo',
+            'notification_topics': 'foo,bar',
             'transport_url': 'rabbit://adam:foobar@rabbithost:5672/foo'
         }
 
@@ -3959,10 +3983,38 @@ class ContextTests(unittest.TestCase):
 
     @patch.object(context, 'socket')
     def test_host_info_context(self, _socket):
-        _socket.getfqdn.return_value = 'myhost.mydomain'
+        _socket.getaddrinfo.return_value = [(None, None, None, 'myhost.mydomain', None)]
         _socket.gethostname.return_value = 'myhost'
         ctxt = context.HostInfoContext()()
         self.assertEqual({
             'host_fqdn': 'myhost.mydomain',
-            'host': 'myhost'},
+            'host': 'myhost',
+            'use_fqdn_hint': False},
+            ctxt)
+        ctxt = context.HostInfoContext(use_fqdn_hint_cb=lambda: True)()
+        self.assertEqual({
+            'host_fqdn': 'myhost.mydomain',
+            'host': 'myhost',
+            'use_fqdn_hint': True},
+            ctxt)
+        # if getaddrinfo is unable to find the canonical name we should return
+        # the shortname to match the behaviour of the original implementation.
+        _socket.getaddrinfo.return_value = [(None, None, None, 'localhost', None)]
+        ctxt = context.HostInfoContext()()
+        self.assertEqual({
+            'host_fqdn': 'myhost',
+            'host': 'myhost',
+            'use_fqdn_hint': False},
+            ctxt)
+        if six.PY2:
+            _socket.error = Exception
+            _socket.getaddrinfo.side_effect = Exception
+        else:
+            _socket.getaddrinfo.side_effect = OSError
+        _socket.gethostname.return_value = 'myhost'
+        ctxt = context.HostInfoContext()()
+        self.assertEqual({
+            'host_fqdn': 'myhost',
+            'host': 'myhost',
+            'use_fqdn_hint': False},
             ctxt)
